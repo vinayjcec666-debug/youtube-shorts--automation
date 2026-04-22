@@ -1,0 +1,438 @@
+{
+  "name": "Daily Facts YouTube Shorts – Gemini + Veo Video + Auto Upload",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "9969fb0b-39dc-4b12-be98-da8010745fc5",
+      "name": "Daily 9AM Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        176,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "bb21ec2c-ccc2-46b3-836f-caf34a5c852b",
+      "name": "Gemini – Script + Veo Prompt",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        400,
+        -32
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "4pSn9pNDFWFkYtnC",
+          "name": "Google Gemini(PaLM) Api account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Gemini JSON output safely\nconst raw = $input.first().json.content;\nconst cleaned = raw.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n\nlet fact;\ntry {\n  fact = JSON.parse(cleaned);\n} catch(e) {\n  fact = {\n    title: 'Mind-Blowing Daily Fact #Shorts',\n    hook_word: 'Did you know',\n    fact_sentence: 'Honey never expires — archaeologists found 3000-year-old honey still edible in Egyptian tombs.',\n    bonus_sentence: 'It was perfectly preserved after 3000 years!',\n    cta: 'Follow for more!',\n    full_narration: 'Did you know honey never expires? Archaeologists found 3000-year-old honey in Egyptian tombs still perfectly edible! Follow for more!',\n    on_screen_text: 'HONEY NEVER EXPIRES!',\n    description: 'Did you know honey never expires? 3000-year-old honey found in Egyptian tombs was still edible! #Shorts #Facts #InterestingFacts #DidYouKnow #MindBlown',\n    tags: ['Shorts','Facts','InterestingFacts','DidYouKnow','MindBlown','DailyFacts','Education'],\n    topic_category: 'history',\n    veo_prompt: 'Cinematic 9:16 vertical video, photorealistic: Close-up of golden honey slowly pouring from an ancient clay pot inside a dimly lit Egyptian tomb. Warm amber light from a torch flickers across golden walls covered in hieroglyphics. The honey catches the light as it flows, revealing its perfect consistency. Camera slowly zooms out to reveal ancient jars and artifacts. Atmospheric fog adds mystery.',\n    estimated_seconds: 10\n  };\n}\n\nfact.generated_at = new Date().toISOString();\nfact.date_label = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });\nfact.day_number = Math.floor((new Date() - new Date('2025-01-01')) / 86400000) + 1;\nfact.word_count = (fact.full_narration || '').split(' ').length;\n\nreturn [{ json: fact }];"
+      },
+      "id": "5fa412bf-5ebf-4f07-8c88-6290ca4ac6a2",
+      "name": "Parse Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://fal.run/fal-ai/veo2",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"prompt\": \"{{ $json.veo_prompt }}\",\n  \"aspect_ratio\": \"9:16\",\n  \"duration\": \"8\",\n  \"resolution\": \"720p\"\n}",
+        "options": {}
+      },
+      "id": "dd6c06a7-8ef4-4a24-8483-5e46a4dfc594",
+      "name": "fal.ai Veo – Generate Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        848,
+        -32
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "HOxXA1cNdeCYOMLm",
+          "name": "Header Auth account"
+        }
+      },
+      "notes": "fal.ai gives access to Veo model via API. Sign up free at fal.ai — pay only per second of video generated. Add HTTP Header Auth credential: Header Name = Authorization, Value = Key YOUR_FAL_API_KEY"
+    },
+    {
+      "parameters": {
+        "jsCode": "// fal.ai returns a request_id for async generation\n// Extract it and pass forward with all fact data\nconst response = $input.first().json;\nconst fact = $('Parse Script').item.json;\n\nconst requestId = response.request_id || response.id || null;\n\nif (!requestId) {\n  throw new Error('fal.ai did not return a request_id. Response: ' + JSON.stringify(response));\n}\n\nreturn [{ json: { ...fact, fal_request_id: requestId } }];"
+      },
+      "id": "3f874aca-eadb-4171-97dc-3b1dcb3c748d",
+      "name": "Extract Request ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 90,
+        "unit": "seconds"
+      },
+      "id": "008061ea-e253-4d35-ad00-f91348e52079",
+      "name": "Wait 90s (Veo Renders)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1248,
+        -32
+      ],
+      "webhookId": "6a50b166-bb8c-4f97-a430-086a516793a5",
+      "notes": "Veo takes 60-120 seconds to render a 10-second video. 90s is a safe default."
+    },
+    {
+      "parameters": {
+        "url": "=https://fal.run/fal-ai/veo2/requests/{{ $json.fal_request_id }}/status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "e5f1d299-9bd1-453b-8e54-b5569b03b4cd",
+      "name": "Check Render Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1440,
+        -32
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "HOxXA1cNdeCYOMLm",
+          "name": "Header Auth account"
+        }
+      },
+      "notes": "Polls fal.ai to check if the video is done rendering."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-001",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "COMPLETED",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c2a7e371-202f-4557-adcf-3414ef44bb71",
+      "name": "Video Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1648,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "id": "dfb01603-c8ab-429e-9314-3c6b14e7e39e",
+      "name": "Wait 30s More",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1840,
+        160
+      ],
+      "webhookId": "f4d7b810-108c-43aa-ace7-d2e8d791094a",
+      "notes": "If not ready yet, wait 30 more seconds then check again."
+    },
+    {
+      "parameters": {
+        "url": "=https://fal.run/fal-ai/veo2/requests/{{ $('Extract Request ID').item.json.fal_request_id }}/status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "4d4ed7d3-2504-4a36-b761-c06a926e0c3f",
+      "name": "Check Status Again",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2048,
+        160
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "HOxXA1cNdeCYOMLm",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract the video URL from fal.ai completed response\nconst status = $input.first().json;\nconst fact = $('Extract Request ID').item.json;\n\nlet videoUrl = null;\n\nif (status.video?.url) {\n  videoUrl = status.video.url;\n} else if (status.output?.video?.url) {\n  videoUrl = status.output.video.url;\n} else if (status.result?.video?.url) {\n  videoUrl = status.result.video.url;\n}\n\nif (!videoUrl) {\n  throw new Error('Could not find video URL in response: ' + JSON.stringify(status));\n}\n\nreturn [{ json: { ...fact, video_url: videoUrl } }];"
+      },
+      "id": "820e2b20-cabc-4a5d-9c03-e11508260fc1",
+      "name": "Extract Video URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.video_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "video_binary"
+            }
+          }
+        }
+      },
+      "id": "b22612a8-3304-43b5-883d-f8b1ab3dcb98",
+      "name": "Download MP4 Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2048,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "filters": {},
+        "options": {}
+      },
+      "id": "e73e1999-c440-4d59-bf3a-7d3b314e62c2",
+      "name": "YouTube – Upload Short",
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [
+        2240,
+        -32
+      ],
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "7LhhP7cBIsEaG26H",
+          "name": "YouTube account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "PASTE_YOUR_TELEGRAM_CHAT_ID_HERE",
+        "text": "=🎬 *Daily Fact Short Posted!*\n\n📌 *Day #{{ $('Parse Script').item.json.day_number }}* — {{ $('Parse Script').item.json.topic_category }}\n\n💬 _{{ $('Parse Script').item.json.full_narration }}_\n\n🖼 On screen: *{{ $('Parse Script').item.json.on_screen_text }}*\n📝 {{ $('Parse Script').item.json.word_count }} words | ~{{ $('Parse Script').item.json.estimated_seconds }}s\n📅 {{ $('Parse Script').item.json.date_label }}\n\n▶️ https://youtube.com/watch?v={{ $json.id }}\n\n_Auto-posted by Veo + Gemini bot_ 🤖",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "105b2086-e07b-4eee-a726-8c7955cb192c",
+      "name": "Telegram – Notify",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [
+        2448,
+        -32
+      ],
+      "webhookId": "0dd89b2c-9a0e-4a4f-baf4-0a52b928332b",
+      "credentials": {
+        "telegramApi": {
+          "id": "euLGQHpyzZafhhfg",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Parse Script": {
+      "main": [
+        [
+          {
+            "node": "fal.ai Veo – Generate Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fal.ai Veo – Generate Video": {
+      "main": [
+        [
+          {
+            "node": "Extract Request ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Request ID": {
+      "main": [
+        [
+          {
+            "node": "Wait 90s (Veo Renders)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 90s (Veo Renders)": {
+      "main": [
+        [
+          {
+            "node": "Check Render Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Render Status": {
+      "main": [
+        [
+          {
+            "node": "Video Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video Ready?": {
+      "main": [
+        [
+          {
+            "node": "Extract Video URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 30s More",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 30s More": {
+      "main": [
+        [
+          {
+            "node": "Check Status Again",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Status Again": {
+      "main": [
+        [
+          {
+            "node": "Extract Video URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Video URL": {
+      "main": [
+        [
+          {
+            "node": "Download MP4 Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download MP4 Video": {
+      "main": [
+        [
+          {
+            "node": "YouTube – Upload Short",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube – Upload Short": {
+      "main": [
+        [
+          {
+            "node": "Telegram – Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "bbba8104-c6f1-4dc2-8869-dcd0bfdefc78",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6dc26c4b2296781021b436718265335c169ce4ee3936d7bef451350ccb7cb260"
+  },
+  "id": "O3Y76slSq5cL1jcB",
+  "tags": []
+}
